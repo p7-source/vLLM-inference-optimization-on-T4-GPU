@@ -35,3 +35,16 @@ Verified with `nvidia-smi`: both GPUs at 100% utilization, about 11.6 GB each.
 - Quantize first: AWQ 4-bit gave 2.4x with no visible quality loss.
 - Batch aggressively: the same GPU did 4.4x more work with larger batches.
 - Extra GPUs only help with enough traffic: half-full batches gave 1.4x; full batches gave 2.4x over one GPU.
+
+## 5. Cost per million tokens
+
+Assumes a cloud T4 at about $0.35/hour per GPU (prices vary by provider).
+
+| Setup | tok/s | Tokens per hour | Cost per 1M tokens |
+|---|---|---|---|
+| FP16, 5 prompts | 138.5 | 0.5M | ~$0.70 |
+| AWQ 4-bit, 5 prompts | 328 | 1.2M | ~$0.30 |
+| AWQ, batch 64 | 1,361 | 4.9M | ~$0.07 |
+| AWQ, 2x T4, 128 prompts | 3,327 | 12M | ~$0.06 |
+
+**Takeaway:** quantization plus batching cut serving cost about 10x on the same hardware. Cost per token depends more on how well you use the GPU than on the GPU itself.

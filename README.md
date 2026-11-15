@@ -48,3 +48,33 @@ Assumes a cloud T4 at about $0.35/hour per GPU (prices vary by provider).
 | AWQ, 2x T4, 128 prompts | 3,327 | 12M | ~$0.06 |
 
 **Takeaway:** quantization plus batching cut serving cost about 10x on the same hardware. Cost per token depends more on how well you use the GPU than on the GPU itself.
+
+# LLM Serving Autoscaling on Kubernetes (kind)
+
+Load-tested autoscaling for an LLM-style inference service on a local Kubernetes cluster, using a fake model server (50 ms CPU per request) in place of vLLM.
+
+## Setup
+- kind cluster, metrics-server
+- FastAPI fake model server: 200m CPU request, 500m limit
+- HPA: target 50% CPU, 1–5 replicas
+- Locust inside the cluster: 50 concurrent users, 3 minutes
+
+## Results
+| Metric | Value |
+|---|---|
+| Requests | 8,997 (0 failures) |
+| Throughput | 50 req/s |
+| Median / p99 latency | 990 ms / 1,600 ms |
+| Scaling | 1 → 4 → 5 pods under load; back to 1 about 8 min after load ended |
+
+## Findings
+- **The HPA scaled out within about a minute** once CPU passed 50%, and scaled in after the cool-down window.
+- **Capacity math matched:** about 10 req/s per pod (half a CPU, 50 ms per request) × 5 pods = 50 req/s.
+- **Latency was queueing, not compute:** 50 users ÷ 50 req/s ≈ 1 s wait (Little's Law). The cluster hit maxReplicas, the next lever to raise.
+- Swapping `fake-llm` for a vLLM image on GPU nodes keeps the same pattern; scale on queue depth or KV cache usage instead of CPU.
+
+## Run
+kind create cluster --name serving
+kubectl apply -f app.yaml
+kubectl create configmap locustfile --from-file=locustfile.py
+kubectl apply -f load.yaml
